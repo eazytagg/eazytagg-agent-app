@@ -377,7 +377,8 @@ fun SyncScreen(vm: AppViewModel) {
                 if (failed > 0) Text("$failed need attention", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
             }
         }
-        Button(onClick = { vm.flushQueue() }, enabled = !vm.syncing && pending > 0, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+        if (vm.syncNote.isNotBlank()) Text(vm.syncNote, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Button(onClick = { vm.networkBack() }, enabled = !vm.syncing && pending > 0, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text(if (vm.syncing) "Sending..." else "Send now", fontWeight = FontWeight.Bold)
         }
         if (vm.queue.isEmpty()) Text("Everything has been sent.", color = MaterialTheme.colorScheme.onSurfaceVariant)

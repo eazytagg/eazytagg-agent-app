@@ -24,6 +24,9 @@ object Api {
         .writeTimeout(20, TimeUnit.SECONDS)
         .build()
 
+    /** Drop pooled sockets, which go stale when Wi-Fi drops and returns. */
+    fun resetConnections() { client.connectionPool.evictAll() }
+
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
     /** "192.168.1.5/eazytagg_test" -> "http://192.168.1.5/eazytagg_test/" */

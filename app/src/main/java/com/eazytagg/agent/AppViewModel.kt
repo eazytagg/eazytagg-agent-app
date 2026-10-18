@@ -73,6 +73,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val queue = mutableStateListOf<QueuedOp>()
     val activity = mutableStateListOf<ActivityItem>()
     var syncing by mutableStateOf(false)
+    var syncNote by mutableStateOf("")
 
     init {
         queue.addAll(store.loadQueue())
@@ -86,7 +87,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch {
             while (true) {
-                delay(15_000)
+                delay(5_000)
                 if (queue.any { !it.failed }) flushQueue()
             }
         }
@@ -421,34 +422,56 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ================= queue =================
     private fun enqueue(op: QueuedOp) { queue.add(op); store.saveQueue(queue.toList()) }
 
+    private fun clock(): String = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+
+    /** Called when the phone gets a network again or the app comes back to the front. */
+    fun networkBack() {
+        Api.resetConnections()
+        flushQueue()
+    }
+
     fun flushQueue() {
         if (syncing) return
+        if (queue.none { !it.failed }) return
         viewModelScope.launch {
             syncing = true
-            val base = store.baseUrl
-            for (op in queue.toList()) {
-                if (op.failed) continue
-                val r: ApiResult = when (op.kind) {
-                    "checkin" -> Api.checkin(base, op.eventCode, op.attendeeUuid)
-                    "checkout" -> Api.checkout(base, op.eventCode, op.attendeeUuid)
-                    "session" -> Api.sessionLog(base, op.eventCode, op.sessionUuid, op.attendeeUuid)
-                    "pin" -> Api.pin(base, op.eventCode, op.pin)
-                    else -> Api.update(base, op.eventCode, op.attendeeUuid, op.entryData)
+            var sent = 0
+            try {
+                val base = store.baseUrl
+                for (op in queue.toList()) {
+                    if (op.failed) continue
+                    val r: ApiResult = when (op.kind) {
+                        "checkin" -> Api.checkin(base, op.eventCode, op.attendeeUuid)
+                        "checkout" -> Api.checkout(base, op.eventCode, op.attendeeUuid)
+                        "session" -> Api.sessionLog(base, op.eventCode, op.sessionUuid, op.attendeeUuid)
+                        "pin" -> Api.pin(base, op.eventCode, op.pin)
+                        else -> Api.update(base, op.eventCode, op.attendeeUuid, op.entryData)
+                    }
+                    if (r is ApiResult.NoConnection) {
+                        online = false
+                        syncNote = "${clock()}  Could not reach the server (${r.reason}). Will try again."
+                        break
+                    }
+                    online = true
+                    val rep = r as ApiResult.Reply
+                    val idx = queue.indexOfFirst { it.id == op.id }
+                    if (idx < 0) continue
+                    if (rep.status == "success" || rep.status == "exists" || rep.message.contains("already", true)) {
+                        queue.removeAt(idx)
+                        sent++
+                        log(op.label, "", "synced", "Sent by ${op.agent}")
+                    } else {
+                        queue[idx] = op.copy(attempts = op.attempts + 1, failed = true, error = rep.message)
+                        syncNote = "${clock()}  The server refused one item: ${rep.message}"
+                    }
+                    store.saveQueue(queue.toList())
                 }
-                if (r is ApiResult.NoConnection) { online = false; break }
-                online = true
-                val rep = r as ApiResult.Reply
-                val idx = queue.indexOfFirst { it.id == op.id }
-                if (idx < 0) continue
-                if (rep.status == "success" || rep.status == "exists" || rep.message.contains("already", true)) {
-                    queue.removeAt(idx)
-                    log(op.label, "", "synced", "Sent by ${op.agent}")
-                } else {
-                    queue[idx] = op.copy(attempts = op.attempts + 1, failed = true, error = rep.message)
-                }
-                store.saveQueue(queue.toList())
+                if (sent > 0) syncNote = "${clock()}  Sent $sent item${if (sent == 1) "" else "s"}."
+            } catch (e: Exception) {
+                syncNote = "${clock()}  Sync problem: ${e.message ?: e.javaClass.simpleName}"
+            } finally {
+                syncing = false
             }
-            syncing = false
             refreshCounts()
         }
     }
