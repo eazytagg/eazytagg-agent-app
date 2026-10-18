@@ -464,7 +464,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ================= misc =================
-    fun setTheme(t: String) { theme = t; store.theme = t }
+    fun chooseTheme(t: String) { theme = t; store.theme = t }
 
     fun clearActivity() { activity.clear(); store.saveActivity(emptyList()) }
 
