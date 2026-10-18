@@ -266,7 +266,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     )
                     log(action, ref, "queued", "No connection")
-                    showResult(ScanResult(ResultKind.QUEUED, "Saved offline", detail = "It will be sent when the connection is back."))
+                    showResult(ScanResult(ResultKind.QUEUED, "Saved offline", detail = "It will be sent when the connection is back. The tag prints then, if this is a first check-in."))
                 }
                 is ApiResult.Reply -> {
                     online = true
@@ -276,7 +276,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     when {
                         r.status == "success" && !already -> {
                             log(action, name.ifBlank { ref }, "ok")
-                            showResult(ScanResult(ResultKind.OK, okTitle(m, pin), name, r.json.optString("package")))
+                            val pk = r.json.optString("package")
+                            val printNote = if (r.json.optBoolean("printed", false)) "Tag sent to the printer" else ""
+                            showResult(ScanResult(ResultKind.OK, okTitle(m, pin), name, listOf(pk, printNote).filter { it.isNotBlank() }.joinToString(" · ")))
                             refreshCounts()
                         }
                         already -> {
@@ -357,7 +359,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 is ApiResult.Reply -> {
                     val already = r.status == "exists" || r.message.contains("already", true)
-                    if (r.status == "success" && !already) { log("Check in", h.display, "ok"); setMsg("Checked in: ${h.display}", false); refreshCounts() }
+                    if (r.status == "success" && !already) { log("Check in", h.display, "ok"); setMsg("Checked in: ${h.display}" + (if (r.json.optBoolean("printed", false)) " · tag sent to the printer" else ""), false); refreshCounts() }
                     else if (already) { log("Check in", h.display, "already", r.message); setMsg("Already checked in: ${h.display}", false) }
                     else { log("Check in", h.display, "error", r.message); setMsg(r.message.ifBlank { "Failed" }, true) }
                 }
