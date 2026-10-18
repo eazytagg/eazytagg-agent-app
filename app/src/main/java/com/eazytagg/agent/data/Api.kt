@@ -89,21 +89,27 @@ object Api {
         return call(base, "attendee.count.php", p)
     }
 
-    suspend fun checkin(base: String, code: String, uuid: String) =
-        call(base, "log.checkin.php", JSONObject().put("event_code", code).put("attendee_uuid", uuid))
+    /** Adds the real scan time (phone clock, epoch ms) for queued scans; live scans omit it. */
+    private fun JSONObject.scanned(at: Long?): JSONObject {
+        if (at != null && at > 0) put("scanned_at", at)
+        return this
+    }
 
-    suspend fun checkout(base: String, code: String, uuid: String) =
-        call(base, "log.checkout.php", JSONObject().put("event_code", code).put("attendee_uuid", uuid))
+    suspend fun checkin(base: String, code: String, uuid: String, at: Long? = null) =
+        call(base, "log.checkin.php", JSONObject().put("event_code", code).put("attendee_uuid", uuid).scanned(at))
 
-    suspend fun sessionLog(base: String, code: String, sessionUuid: String, uuid: String) =
+    suspend fun checkout(base: String, code: String, uuid: String, at: Long? = null) =
+        call(base, "log.checkout.php", JSONObject().put("event_code", code).put("attendee_uuid", uuid).scanned(at))
+
+    suspend fun sessionLog(base: String, code: String, sessionUuid: String, uuid: String, at: Long? = null) =
         call(
             base, "log.sessions.php",
             JSONObject().put("event_code", code).put("session_uuid", sessionUuid)
-                .put("type", "session").put("attendee_uuid", uuid)
+                .put("type", "session").put("attendee_uuid", uuid).scanned(at)
         )
 
-    suspend fun pin(base: String, code: String, pin: String) =
-        call(base, "pin.entry.php", JSONObject().put("event_code", code).put("pin_code", pin))
+    suspend fun pin(base: String, code: String, pin: String, at: Long? = null) =
+        call(base, "pin.entry.php", JSONObject().put("event_code", code).put("pin_code", pin).scanned(at))
 
     suspend fun search(base: String, code: String, term: String) =
         call(base, "attendee.search.php", JSONObject().put("event_code", code).put("term", term))

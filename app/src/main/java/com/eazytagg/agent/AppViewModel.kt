@@ -441,10 +441,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 for (op in queue.toList()) {
                     if (op.failed) continue
                     val r: ApiResult = when (op.kind) {
-                        "checkin" -> Api.checkin(base, op.eventCode, op.attendeeUuid)
-                        "checkout" -> Api.checkout(base, op.eventCode, op.attendeeUuid)
-                        "session" -> Api.sessionLog(base, op.eventCode, op.sessionUuid, op.attendeeUuid)
-                        "pin" -> Api.pin(base, op.eventCode, op.pin)
+                        "checkin" -> Api.checkin(base, op.eventCode, op.attendeeUuid, op.at)
+                        "checkout" -> Api.checkout(base, op.eventCode, op.attendeeUuid, op.at)
+                        "session" -> Api.sessionLog(base, op.eventCode, op.sessionUuid, op.attendeeUuid, op.at)
+                        "pin" -> Api.pin(base, op.eventCode, op.pin, op.at)
                         else -> Api.update(base, op.eventCode, op.attendeeUuid, op.entryData)
                     }
                     if (r is ApiResult.NoConnection) {
