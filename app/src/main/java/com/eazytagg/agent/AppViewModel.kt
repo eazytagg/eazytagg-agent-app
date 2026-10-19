@@ -336,7 +336,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 hits = (0 until uuids.length()).map { i ->
                     val o = raw.optJSONObject(i) ?: JSONObject()
                     val m = o.keys().asSequence().associateWith { k -> o.optString(k) }
-                    SearchHit(uuids.optString(i), disp.optString(i).ifBlank { "(no name)" }, m)
+                    // name shown: the event's search setting, else the name field(s), else the first filled values
+                    val nameIds = ev.successField.split(' ').filter { it.isNotBlank() }
+                    val fromName = nameIds.map { m[it].orEmpty().trim() }.filter { it.isNotEmpty() }.joinToString(" ")
+                    val firstValues = m.values.map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("(") }.take(2).joinToString(", ")
+                    val shown = disp.optString(i).replace(Regex("^[,\\s]+|[,\\s]+$"), "").ifBlank { fromName }.ifBlank { firstValues }.ifBlank { "(no name)" }
+                    SearchHit(uuids.optString(i), shown, m)
                 }.take(100)
                 if (hits.isEmpty()) setMsg("Nobody matches \"${searchTerm.trim()}\".", false)
             }
