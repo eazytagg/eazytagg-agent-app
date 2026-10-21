@@ -1,6 +1,7 @@
 package com.eazytagg.agent.data
 
 import android.content.Context
+import android.util.AtomicFile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -34,6 +35,10 @@ class Store(private val ctx: Context) {
         get() = prefs.getString("sessions", "[]") ?: "[]"
         set(v) = prefs.edit().putString("sessions", v).apply()
 
+    var countsJson: String
+        get() = prefs.getString("counts", "") ?: ""
+        set(v) = prefs.edit().putString("counts", v).apply()
+
     /** dark (default) | light | system */
     var theme: String
         get() = prefs.getString("theme", "dark") ?: "dark"
@@ -41,15 +46,22 @@ class Store(private val ctx: Context) {
 
     private fun file(name: String) = File(ctx.filesDir, name)
 
+    private fun writeAtomic(name: String, data: String) {
+        val target = AtomicFile(file(name))
+        val out = target.startWrite()
+        try { out.write(data.toByteArray(Charsets.UTF_8)); target.finishWrite(out) }
+        catch (error: Exception) { target.failWrite(out); throw error }
+    }
+
     private fun readArray(name: String): JSONArray = synchronized(lock) {
         try {
             val f = file(name)
-            if (f.exists()) JSONArray(f.readText()) else JSONArray()
+            if (f.exists() || File(f.path + ".bak").exists()) JSONArray(AtomicFile(f).openRead().bufferedReader().use { it.readText() }) else JSONArray()
         } catch (e: Exception) { JSONArray() }
     }
 
     private fun writeArray(name: String, arr: JSONArray) = synchronized(lock) {
-        file(name).writeText(arr.toString())
+        writeAtomic(name, arr.toString())
     }
 
     fun loadQueue(): List<QueuedOp> {

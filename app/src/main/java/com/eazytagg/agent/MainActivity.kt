@@ -14,7 +14,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import com.eazytagg.agent.ui.EazyTheme
+import com.eazytagg.agent.ui.PDynamicsTheme
 import com.eazytagg.agent.ui.Root
 import com.eazytagg.agent.ui.isDarkFor
 
@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
                 c.isAppearanceLightStatusBars = !dark
                 c.isAppearanceLightNavigationBars = !dark
             }
-            EazyTheme(dark) {
+            PDynamicsTheme(dark) {
                 BackHandler(enabled = vm.stack.size > 1) { vm.back() }
                 Root(vm)
             }

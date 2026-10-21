@@ -9,7 +9,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-/** Result of one call to the EazyTagg PHP API. */
+/** Result of one call to the PDynamics PHP API. */
 sealed class ApiResult {
     /** Server answered with JSON. [status] is the "status" field (success / error / exists). */
     data class Reply(val status: String, val message: String, val json: JSONObject) : ApiResult()
@@ -43,6 +43,22 @@ object Api {
         return "$s/"
     }
 
+    /** Probe only the user-supplied host before sending any login credentials. */
+    suspend fun discover(input: String): Pair<String, ApiResult> {
+        val bases = ServerAddress.candidates(input)
+        if (bases.isEmpty()) return "" to ApiResult.NoConnection("Enter a valid server IP or http/https address, without a login, query or fragment.")
+        var last: ApiResult = ApiResult.NoConnection("Server not found")
+        for (base in bases) {
+            val reply = ping(base)
+            if (reply is ApiResult.Reply && reply.status == "success" && reply.message == "Connected to Server") return base to reply
+            last = reply
+        }
+        return "" to last
+    }
+
+    suspend fun printTag(base: String, uuid: String, agent: String) =
+        call(base, "attendee.print.php", JSONObject().put("attendee_uuid", uuid).put("agent", agent))
+
     private fun parse(body: String): ApiResult {
         val start = body.indexOf('{')
         if (start < 0) return ApiResult.NoConnection("The server did not answer correctly. Check the server address.")
@@ -63,7 +79,7 @@ object Api {
                 }.build()
                 client.newCall(req).execute().use { resp ->
                     val text = resp.body?.string().orEmpty()
-                    if (resp.code >= 500 && !text.contains("{")) {
+                    if (!resp.isSuccessful) {
                         ApiResult.NoConnection("Server error (${resp.code})")
                     } else parse(text)
                 }

@@ -10,6 +10,12 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import com.eazytagg.agent.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,36 +80,84 @@ fun CameraScanner(modifier: Modifier = Modifier, onCode: (String) -> Unit) {
         }
     }
 
-    AndroidView(
-        modifier = modifier.fillMaxSize(),
-        factory = { c ->
-            val previewView = PreviewView(c).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
-            val providerFuture = ProcessCameraProvider.getInstance(c)
-            providerFuture.addListener({
-                val provider = providerFuture.get()
+    val previewView = remember { PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
+    var front by remember { mutableStateOf(false) }
+    var frontAvailable by remember { mutableStateOf(false) }
+    var backAvailable by remember { mutableStateOf(true) }
+    var torch by remember { mutableStateOf(false) }
+    var flashAvailable by remember { mutableStateOf(false) }
+    var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+    var cameraError by remember { mutableStateOf("") }
+    DisposableEffect(previewView, front, lifecycleOwner) {
+        var disposed = false
+        var boundProvider: ProcessCameraProvider? = null
+        var boundPreview: Preview? = null
+        var boundAnalysis: ImageAnalysis? = null
+        val future = ProcessCameraProvider.getInstance(ctx)
+        future.addListener({
+            if (!disposed) try {
+                val provider = future.get()
+                boundProvider = provider
+                frontAvailable = provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
+                backAvailable = provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
+                val selector = if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
-                val analysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
+                val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+                boundPreview = preview; boundAnalysis = analysis
                 analysis.setAnalyzer(executor) { proxy ->
                     val media = proxy.image
-                    if (media == null) {
-                        proxy.close()
-                    } else {
-                        val img = InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees)
-                        scanner.process(img)
-                            .addOnSuccessListener { codes ->
-                                codes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue?.let { current(it) }
-                            }
-                            .addOnCompleteListener { proxy.close() }
-                    }
+                    if (media == null || disposed) proxy.close()
+                    else scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
+                        .addOnSuccessListener { codes -> if (!disposed) codes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue?.let { current(it) } }
+                        .addOnCompleteListener { proxy.close() }
                 }
-                try {
-                    provider.unbindAll()
-                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                } catch (_: Exception) { }
-            }, ContextCompat.getMainExecutor(c))
-            previewView
+                camera = provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
+                flashAvailable = camera?.cameraInfo?.hasFlashUnit() == true
+                torch = false; cameraError = ""
+            } catch (_: Exception) { cameraError = "Camera unavailable. Use search or PIN, or select another camera." }
+        }, ContextCompat.getMainExecutor(ctx))
+        onDispose {
+            disposed = true
+            camera?.cameraControl?.enableTorch(false)
+            boundAnalysis?.clearAnalyzer()
+            val uses = listOfNotNull(boundPreview, boundAnalysis).toTypedArray()
+            if (uses.isNotEmpty()) boundProvider?.unbind(*uses)
+            camera = null
         }
-    )
+    }
+    Box(modifier) {
+        AndroidView(modifier = Modifier.fillMaxSize(), factory = { previewView })
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize().padding(bottom = 132.dp)) {
+            val side = size.minDimension * 0.62f
+            val left = (size.width - side) / 2; val top = (size.height - side) / 2
+            val length = side * 0.16f
+            for (x in listOf(left, left + side)) for (y in listOf(top, top + side)) {
+                drawLine(androidx.compose.ui.graphics.Color.White, androidx.compose.ui.geometry.Offset(x,y), androidx.compose.ui.geometry.Offset(x + if(x == left) length else -length,y), 4.dp.toPx())
+                drawLine(androidx.compose.ui.graphics.Color.White, androidx.compose.ui.geometry.Offset(x,y), androidx.compose.ui.geometry.Offset(x,y + if(y == top) length else -length), 4.dp.toPx())
+            }
+            drawLine(androidx.compose.ui.graphics.Color(0xFF00B7FF), androidx.compose.ui.geometry.Offset(left,top+side/2), androidx.compose.ui.geometry.Offset(left+side,top+side/2), 2.dp.toPx())
+        }
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(androidx.compose.ui.graphics.Color(0xE611151C)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(cameraError.ifBlank { "Point the camera at the guest's QR code" }, color = androidx.compose.ui.graphics.Color.White)
+            CameraControls(front, frontAvailable, backAvailable, torch, flashAvailable,
+                onFront = { front = it }, onTorch = { enabled ->
+                    camera?.cameraControl?.enableTorch(enabled)?.addListener({
+                        torch = camera?.cameraInfo?.torchState?.value == androidx.camera.core.TorchState.ON
+                    }, ContextCompat.getMainExecutor(ctx))
+                })
+        }
+    }
+}
+
+@Composable
+internal fun CameraControls(front: Boolean, frontAvailable: Boolean, backAvailable: Boolean, torch: Boolean, flash: Boolean, onFront: (Boolean) -> Unit, onTorch: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.FilterChip(selected = !front, enabled = backAvailable, onClick = { onFront(false) }, label = { Text("Back") }, leadingIcon = { androidx.compose.material3.Icon(painterResource(R.drawable.ic_camera), null, Modifier.size(20.dp)) })
+        androidx.compose.material3.FilterChip(selected = front, enabled = frontAvailable, onClick = { onFront(true) }, label = { Text("Front") }, leadingIcon = { androidx.compose.material3.Icon(painterResource(R.drawable.ic_front), null, Modifier.size(20.dp)) })
+    }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        androidx.compose.material3.Icon(painterResource(R.drawable.ic_torch), null, Modifier.size(24.dp), tint = androidx.compose.ui.graphics.Color.White)
+        Text(if (flash) "Torch" else "Torch unavailable", color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.weight(1f))
+        androidx.compose.material3.Switch(checked = torch && flash, enabled = flash, onCheckedChange = onTorch)
+    }
 }

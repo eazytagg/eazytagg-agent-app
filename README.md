@@ -1,4 +1,4 @@
-# EazyTagg Agent App
+# PDynamics Agent App
 
 Android app for door staff. Works with the existing EazyTagg PHP system (`/api/*.php`).
 
@@ -18,3 +18,12 @@ Or open the folder in Android Studio and run the `app` configuration.
 
 - Android emulator: server address `10.0.2.2/eazytagg_test`
 - Real phone on the same Wi-Fi: `http://<PC-IP>/eazytagg_test` (Apache must accept connections from the network)
+
+
+## Latest PDynamics test download
+
+The `test-latest` GitHub prerelease contains the current test APK and `build-info.json` with the source commit and SHA-256 checksum. The office Git Pull page retrieves the selected app's source and matching APK into `APKS/builds`. Wait for the GitHub build to finish before downloading.
+
+GitHub Actions runs the app tests before publishing. Repository secret `PDYNAMICS_TEST_KEYSTORE_B64` holds the persistent test keystore so future test APKs can update the existing installation. Never commit the keystore or its base64 value. These are internal test builds, not Play Store releases.
+
+Current preview: **0.1.1**. Includes the PDynamics icon and full wordmark, light/dark/device themes, portrait/landscape account layout, coloured guest action icons, scanner camera/torch controls, local-server attendance and event-day figures, cached counts and persistent offline action syncing. Send SMS is intentionally omitted. Device camera, torch and physical printing still require hardware validation.

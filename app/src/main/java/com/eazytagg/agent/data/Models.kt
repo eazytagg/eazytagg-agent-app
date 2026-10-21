@@ -76,7 +76,7 @@ data class EventInfo(
                     placeholder = f.optString("field_placeholder")
                 )
             }
-            return EventInfo(code, fs, o.optString("success_field"), o.optString("end_date"), "")
+            return EventInfo(code, fs, o.optString("success_field"), o.optString("end_date"), o.optString("title").ifBlank { o.optString("event_name") })
         }
     }
 }
@@ -86,8 +86,25 @@ data class SessionInfo(val uuid: String, val name: String)
 data class Counts(
     val today: Int = 0,
     val days: List<Pair<String, Int>> = emptyList(),
-    val sessions: List<Pair<String, Int>> = emptyList()
-)
+    val sessions: List<Pair<String, Int>> = emptyList(),
+    val total: Int? = null,
+    val eventDays: Int? = null,
+    val currentDay: Int = 0,
+    val updatedAt: Long = 0
+) {
+    fun toJson(): String = JSONObject().apply {
+        put("today", today); put("total", total); put("eventDays", eventDays); put("currentDay", currentDay); put("updatedAt", updatedAt)
+        put("days", JSONObject().apply { days.forEach { put(it.first, it.second) } })
+        put("sessions", JSONObject().apply { sessions.forEach { put(it.first, it.second) } })
+    }.toString()
+    companion object {
+        fun fromJson(raw: String): Counts = try {
+            val o = JSONObject(raw)
+            fun entries(key: String): List<Pair<String, Int>> = o.optJSONObject(key)?.let { obj -> obj.keys().asSequence().map { it to obj.optInt(it) }.toList() }.orEmpty()
+            Counts(o.optInt("today"), entries("days"), entries("sessions"), if(o.has("total") && !o.isNull("total")) o.optInt("total") else null, if(o.has("eventDays") && !o.isNull("eventDays")) o.optInt("eventDays") else null, o.optInt("currentDay"), o.optLong("updatedAt"))
+        } catch (_: Exception) { Counts() }
+    }
+}
 
 enum class Mode(val label: String) {
     CHECKIN("Check in"), CHECKOUT("Check out"), SESSION("Session")

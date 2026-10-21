@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,7 +36,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun isWide(): Boolean = LocalConfiguration.current.screenWidthDp >= 600
+fun isWide(): Boolean = LocalConfiguration.current.let { it.screenWidthDp >= 840 && it.screenWidthDp > it.screenHeightDp }
 
 fun timeText(ms: Long): String = SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date(ms))
 
@@ -60,7 +61,8 @@ fun Page(
             TopAppBar(
                 title = {
                     Column {
-                        Text(title, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        Text("PDynamics Agent", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                         if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
@@ -87,7 +89,7 @@ fun Page(
                 }
             }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                val m = Modifier.widthIn(max = 760.dp).fillMaxSize().padding(horizontal = 16.dp)
+                val m = Modifier.imePadding().widthIn(max = 760.dp).fillMaxSize().padding(horizontal = 16.dp)
                 if (scroll) Column(m.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
                 else Column(m, verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
             }

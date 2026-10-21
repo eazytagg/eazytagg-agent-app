@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class Screen { SignIn, EventCode, Dashboard, Sessions, Scan, Search, Edit, Sync, Activity, Settings }
+enum class Screen { SignIn, EventCode, Dashboard, Sessions, Scan, Search, Guest, Edit, Sync, Activity, Settings }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
@@ -47,7 +47,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var eventCodeInput by mutableStateOf("")
     var event by mutableStateOf<EventInfo?>(null)
     var sessions by mutableStateOf<List<SessionInfo>>(emptyList())
-    var counts by mutableStateOf(Counts())
+    var counts by mutableStateOf(Counts.fromJson(store.countsJson))
     var mode by mutableStateOf(Mode.CHECKIN)
     var selectedSession by mutableStateOf<SessionInfo?>(null)
 
@@ -63,6 +63,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var hits by mutableStateOf<List<SearchHit>>(emptyList())
     var searching by mutableStateOf(false)
     private var searchJob: Job? = null
+    var selectedGuest by mutableStateOf<SearchHit?>(null)
+    var printMessage by mutableStateOf("")
     var editUuid by mutableStateOf("")
     var editName by mutableStateOf("")
     val editValues = mutableStateMapOf<String, String>()
@@ -95,25 +97,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ================= sign in =================
     fun testConnection() {
-        val base = Api.normalizeBase(serverUrl)
-        if (base.isEmpty()) { setMsg("Enter the server address first.", true); return }
-        serverUrl = base
+        if (busy) return
         viewModelScope.launch {
             busy = true
-            when (val r = Api.ping(base)) {
-                is ApiResult.Reply -> { online = true; setMsg(if (r.status == "success") "Connected to the server." else "Server replied: ${r.message}", r.status != "success") }
-                is ApiResult.NoConnection -> setMsg("Cannot reach the server: ${r.reason}", true)
-            }
+            val (base, reply) = Api.discover(serverUrl)
+            online = base.isNotBlank()
+            if (base.isNotBlank()) { serverUrl = base; setMsg("Connected to the server.", false) }
+            else setMsg("Cannot reach the server. Check the address and Wi-Fi. " + (reply as? ApiResult.NoConnection)?.reason.orEmpty(), true)
             busy = false
         }
     }
 
     fun signIn() {
-        val base = Api.normalizeBase(serverUrl)
-        if (base.isEmpty()) { setMsg("Enter the server address.", true); return }
+        if (busy) return
+        if (serverUrl.isBlank()) { setMsg("Enter the server address.", true); return }
         if (email.isBlank() || password.isBlank()) { setMsg("Enter your email and password.", true); return }
         viewModelScope.launch {
             busy = true; message = ""
+            val (base, _) = Api.discover(serverUrl)
+            if (base.isBlank()) { online = false; setMsg("Cannot find the server. Test the connection and check Wi-Fi.", true); busy = false; return@launch }
+            if (queue.isNotEmpty() && store.baseUrl.isNotBlank() && base != store.baseUrl) {
+                setMsg("Sync the actions saved on this device before changing servers.", true); busy = false; return@launch
+            }
             when (val r = Api.login(base, email.trim(), password)) {
                 is ApiResult.Reply -> {
                     online = true
@@ -153,6 +158,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     online = true
                     if (r.status == "success") {
                         val ev = EventInfo.fromServer(code, r.json)
+                        if (event?.code != ev.code) { counts = Counts(); store.countsJson = "" }
                         event = ev
                         store.eventJson = ev.toJson()
                         loadSessions(code)
@@ -200,11 +206,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (detailed is ApiResult.Reply) {
                 val c = detailed.json.optJSONObject("count")
                 val d = c?.optJSONObject("days")
-                if (d != null) days = d.keys().asSequence().map { it to d.optInt(it) }.toList()
+                if (d != null) days = d.keys().asSequence().map { it to d.optInt(it) }.toList().sortedBy { it.first.removePrefix("Day ").toIntOrNull() ?: Int.MAX_VALUE }
                 val s = c?.optJSONObject("sessions")
                 sess = if (s != null) s.keys().asSequence().map { it to s.optInt(it) }.toList() else emptyList()
             }
-            counts = Counts(today, days, sess)
+            val meta = (simple as? ApiResult.Reply)?.takeIf { it.status == "success" }?.json
+            counts = Counts(today, days, sess,
+                meta?.takeIf { it.has("total_attendees") }?.optInt("total_attendees") ?: counts.total,
+                meta?.takeIf { it.has("event_days") }?.optInt("event_days") ?: counts.eventDays,
+                meta?.optInt("current_day", counts.currentDay) ?: counts.currentDay,
+                if (meta != null) System.currentTimeMillis() else counts.updatedAt)
+            store.countsJson = counts.toJson()
         }
     }
 
@@ -226,7 +238,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         when {
             uuid != null -> perform(uuid, "")
             PIN_RE.matches(text.trim()) -> perform("", text.trim())
-            else -> showResult(ScanResult(ResultKind.ERROR, "Unrecognised code", detail = "This is not an EazyTagg code."))
+            else -> showResult(ScanResult(ResultKind.ERROR, "Unrecognised code", detail = "This is not a PDynamics code."))
         }
     }
 
@@ -238,10 +250,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun perform(uuid: String, pin: String) {
+        if (busy) return
         val ev = event ?: return
         val base = store.baseUrl
         val m = mode
         val sess = selectedSession
+        if (pin.isNotEmpty() && m != Mode.CHECKIN) { showResult(ScanResult(ResultKind.ERROR, "Scan the guest's QR code", detail = "PIN entry is for check-in. Use a QR code for checkout or sessions.")); return }
         if (m == Mode.SESSION && sess == null) { showResult(ScanResult(ResultKind.ERROR, "Choose a session first")); return }
         viewModelScope.launch {
             busy = true
@@ -372,6 +386,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun openGuest(h: SearchHit) { selectedGuest = h; printMessage = ""; clearMsg(); go(Screen.Guest) }
+
+    fun guestAction(action: Mode) {
+        val guest = selectedGuest ?: return
+        mode = action
+        if (action == Mode.SESSION) { go(Screen.Sessions); return }
+        perform(guest.uuid, "")
+    }
+
+    fun printTag(uuid: String) {
+        if (busy) return
+        viewModelScope.launch {
+            busy = true; printMessage = ""
+            when (val reply = Api.printTag(store.baseUrl, uuid, agentName)) {
+                is ApiResult.NoConnection -> { online = false; printMessage = "Printing needs a connection to the event server. No print has been queued." }
+                is ApiResult.Reply -> {
+                    online = true
+                    printMessage = reply.message.ifBlank { "The printer did not confirm the request." }
+                    log("Print tag", selectedGuest?.display.orEmpty(), if (reply.status == "success") "ok" else "error", printMessage)
+                }
+            }
+            busy = false
+        }
+    }
+
     fun startEdit(h: SearchHit) {
         val ev = event ?: return
         editUuid = h.uuid
@@ -399,6 +438,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun saveEdit() {
+        if (busy) return
         val ev = event ?: return
         val missing = ev.fields.filter { it.editable && it.required && !it.isMulti && editValues[it.id].orEmpty().isBlank() }
         if (missing.isNotEmpty()) { setMsg("Fill in: ${missing.joinToString { it.name }}", true); return }
@@ -411,13 +451,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             busy = true; message = ""
             when (val r = Api.update(store.baseUrl, ev.code, editUuid, data.toString())) {
                 is ApiResult.NoConnection -> {
+                    online = false
                     enqueue(QueuedOp(System.nanoTime(), "update", ev.code, attendeeUuid = editUuid, entryData = data.toString(), agent = agentName, at = System.currentTimeMillis(), label = "Edit · $editName"))
                     log("Edit details", editName, "queued", "No connection")
                     setMsg("Saved offline. It will be sent when the connection is back.", false)
                     editSaved = true
                 }
                 is ApiResult.Reply -> when (r.status) {
-                    "success" -> { log("Edit details", editName, "ok"); editSaved = true; setMsg("Saved.", false) }
+                    "success" -> { online = true; log("Edit details", editName, "ok"); editSaved = true; setMsg("Saved.", false) }
                     "exists" -> { log("Edit details", editName, "error", r.message); setMsg(r.message, true) }
                     else -> { log("Edit details", editName, "error", r.message); setMsg(r.message.ifBlank { "Could not save." }, true) }
                 }
@@ -440,8 +481,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun flushQueue() {
         if (syncing) return
         if (queue.none { !it.failed }) return
+        syncing = true
         viewModelScope.launch {
-            syncing = true
             var sent = 0
             try {
                 val base = store.baseUrl
@@ -463,7 +504,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val rep = r as ApiResult.Reply
                     val idx = queue.indexOfFirst { it.id == op.id }
                     if (idx < 0) continue
-                    if (rep.status == "success" || rep.status == "exists" || rep.message.contains("already", true)) {
+                    if (rep.status == "success" || (op.kind != "update" && rep.status == "exists")) {
                         queue.removeAt(idx)
                         sent++
                         log(op.label, "", "synced", "Sent by ${op.agent}")
