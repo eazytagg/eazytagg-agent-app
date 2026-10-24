@@ -39,6 +39,11 @@ class Store(private val ctx: Context) {
         get() = prefs.getString("theme", "dark") ?: "dark"
         set(v) = prefs.edit().putString("theme", v).apply()
 
+    /** Popular Dynamics menu layout: icons | list. */
+    var menuView: String
+        get() = prefs.getString("menuView", "icons") ?: "icons"
+        set(v) = prefs.edit().putString("menuView", v).apply()
+
     private fun file(name: String) = File(ctx.filesDir, name)
 
     private fun readArray(name: String): JSONArray = synchronized(lock) {

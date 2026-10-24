@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -55,10 +56,12 @@ import com.eazytagg.agent.data.ResultKind
 
 @Composable
 fun Root(vm: AppViewModel) {
+    val pd = com.eazytagg.agent.Brand.isPd
     when (vm.screen) {
-        Screen.SignIn -> SignInScreen(vm)
-        Screen.EventCode -> EventCodeScreen(vm)
-        Screen.Dashboard -> DashboardScreen(vm)
+        Screen.Splash -> if (pd) PdSplash(vm) else SignInScreen(vm)
+        Screen.SignIn -> if (pd) PdSignIn(vm) else SignInScreen(vm)
+        Screen.EventCode -> if (pd) PdFindEvent(vm) else EventCodeScreen(vm)
+        Screen.Dashboard -> if (pd) PdMenu(vm) else DashboardScreen(vm)
         Screen.Sessions -> SessionsScreen(vm)
         Screen.Scan -> ScanScreen(vm)
         Screen.Search -> SearchScreen(vm)
@@ -70,9 +73,11 @@ fun Root(vm: AppViewModel) {
 }
 
 private fun pendingCount(vm: AppViewModel) = vm.queue.count { !it.failed }
-private fun offlineBanner(vm: AppViewModel): String? {
+internal fun offlineBanner(vm: AppViewModel): String? {
     val n = pendingCount(vm)
     return when {
+        vm.testMode && !vm.online -> "Test mode on. Offline. Nothing is saved."
+        vm.testMode -> "Test mode on. Nothing is saved or sent."
         !vm.online && n > 0 -> "Offline - $n waiting to sync"
         !vm.online -> "Offline - actions are saved and sent later"
         else -> null
@@ -226,7 +231,20 @@ fun ScanScreen(vm: AppViewModel) {
         val wide = isWide()
         val camera: @Composable (Modifier) -> Unit = { m ->
             Box(m.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp)).clip20()) {
-                CameraScanner(Modifier.fillMaxSize()) { vm.onScanned(it) }
+                var hasTorch by remember { mutableStateOf(false) }
+                CameraScanner(Modifier.fillMaxSize(), torch = vm.torchOn, front = vm.frontCamera, onTorchSupport = { hasTorch = it }) { vm.onScanned(it) }
+                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    OutlinedButton(
+                        onClick = { vm.frontCamera = !vm.frontCamera; vm.torchOn = false },
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0x8C0A0B24), contentColor = Color.White),
+                        border = BorderStroke(1.5.dp, Color(0x73FFFFFF))
+                    ) { Text(if (vm.frontCamera) "Front" else "Back") }
+                    if (hasTorch && !vm.frontCamera) OutlinedButton(
+                        onClick = { vm.torchOn = !vm.torchOn },
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = if (vm.torchOn) Color(0xFF199BF1) else Color(0x8C0A0B24), contentColor = Color.White),
+                        border = BorderStroke(1.5.dp, Color(0x73FFFFFF))
+                    ) { Text(if (vm.torchOn) "Light on" else "Light") }
+                }
                 ResultOverlay(vm)
             }
         }
@@ -450,6 +468,6 @@ fun SettingsScreen(vm: AppViewModel) {
             onClick = { vm.signOut() }, modifier = Modifier.fillMaxWidth().height(48.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface)
         ) { Text("Sign out / change server") }
-        Text("EazyTagg Agent 0.1.0", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (com.eazytagg.agent.Brand.isPd) "Popular Dynamics door staff 0.1.0" else "EazyTagg Agent 0.1.0", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

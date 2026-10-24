@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -21,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,7 +43,13 @@ import java.util.concurrent.Executors
 
 @OptIn(ExperimentalGetImage::class)
 @Composable
-fun CameraScanner(modifier: Modifier = Modifier, onCode: (String) -> Unit) {
+fun CameraScanner(
+    modifier: Modifier = Modifier,
+    torch: Boolean = false,
+    front: Boolean = false,
+    onTorchSupport: (Boolean) -> Unit = {},
+    onCode: (String) -> Unit
+) {
     val ctx = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var granted by remember {
@@ -74,6 +82,15 @@ fun CameraScanner(modifier: Modifier = Modifier, onCode: (String) -> Unit) {
         }
     }
 
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    LaunchedEffect(camera, torch) {
+        val cam = camera ?: return@LaunchedEffect
+        val has = cam.cameraInfo.hasFlashUnit()
+        onTorchSupport(has)
+        if (has) try { cam.cameraControl.enableTorch(torch) } catch (_: Exception) {}
+    }
+
+    key(front) {
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { c ->
@@ -100,10 +117,15 @@ fun CameraScanner(modifier: Modifier = Modifier, onCode: (String) -> Unit) {
                 }
                 try {
                     provider.unbindAll()
-                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                    camera = provider.bindToLifecycle(
+                        lifecycleOwner,
+                        if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview, analysis
+                    )
                 } catch (_: Exception) { }
             }, ContextCompat.getMainExecutor(c))
             previewView
         }
     )
+    }
 }

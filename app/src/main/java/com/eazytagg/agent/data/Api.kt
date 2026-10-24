@@ -122,4 +122,8 @@ object Api {
             base, "update.entry.php",
             JSONObject().put("event_code", code).put("attendee_uuid", uuid).put("entry_data", entryData)
         )
+
+    /** Find events by name. Needs the search.events.php endpoint on the server. */
+    suspend fun searchEvents(base: String, term: String) =
+        call(base, "search.events.php", JSONObject().put("term", term))
 }

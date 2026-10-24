@@ -153,3 +153,8 @@ enum class ResultKind { OK, ALREADY, ERROR, QUEUED }
 data class ScanResult(val kind: ResultKind, val title: String, val name: String = "", val detail: String = "")
 
 data class SearchHit(val uuid: String, val display: String, val data: Map<String, String>)
+
+/** One event found by name. */
+data class EventHit(val code: String, val title: String, val city: String, val date: String) {
+    val sub: String get() = listOf(code, city, date).filter { it.isNotBlank() }.joinToString(" · ")
+}

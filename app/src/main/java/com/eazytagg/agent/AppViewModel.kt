@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class Screen { SignIn, EventCode, Dashboard, Sessions, Scan, Search, Edit, Sync, Activity, Settings }
+enum class Screen { Splash, SignIn, EventCode, Dashboard, Sessions, Scan, Search, Edit, Sync, Activity, Settings }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
@@ -69,6 +69,49 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val editMulti = mutableStateMapOf<String, List<String>>()
     var editSaved by mutableStateOf(false)
 
+    // ---- Popular Dynamics extras ----
+    /** Practice mode: scans are answered locally, nothing is sent or queued. */
+    var testMode by mutableStateOf(false)
+    var menuView by mutableStateOf(store.menuView)
+    var torchOn by mutableStateOf(false)
+    var frontCamera by mutableStateOf(false)
+    var eventQuery by mutableStateOf("")
+    var eventHits by mutableStateOf<List<EventHit>>(emptyList())
+    var eventSearching by mutableStateOf(false)
+    private var eventJob: Job? = null
+    private var bootTarget = Screen.SignIn
+
+    fun chooseMenuView(v: String) { menuView = v; store.menuView = v }
+
+    /** Called when the splash animation has played. */
+    fun finishSplash() { if (screen == Screen.Splash) reset(bootTarget) }
+
+    fun onEventQueryChange(t: String) {
+        eventQuery = t
+        eventJob?.cancel()
+        if (t.trim().length < 2) { eventHits = emptyList(); eventSearching = false; return }
+        eventJob = viewModelScope.launch {
+            delay(350)
+            eventSearching = true
+            when (val r = Api.searchEvents(store.baseUrl, t.trim())) {
+                is ApiResult.Reply -> {
+                    online = true
+                    val arr = r.json.optJSONArray("events") ?: JSONArray()
+                    eventHits = (0 until arr.length()).map { i ->
+                        val o = arr.getJSONObject(i)
+                        EventHit(o.optString("code"), o.optString("title"), o.optString("city"), o.optString("date"))
+                    }.filter { it.code.isNotBlank() }
+                    if (r.status != "success") setMsg(r.message.ifBlank { "Event search is not available on this server yet." }, true)
+                    else if (eventHits.isEmpty()) setMsg("No event matches that name.", false) else clearMsg()
+                }
+                is ApiResult.NoConnection -> { eventHits = emptyList(); setMsg("Cannot search while offline. Type the event code instead.", true) }
+            }
+            eventSearching = false
+        }
+    }
+
+    fun pickEvent(h: EventHit) { eventCodeInput = h.code; clearMsg() }
+
     // ---- queue / activity ----
     val queue = mutableStateListOf<QueuedOp>()
     val activity = mutableStateListOf<ActivityItem>()
@@ -81,9 +124,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         event = EventInfo.fromJson(store.eventJson)
         sessions = store.loadSessions()
         if (store.signedIn && agentName.isNotBlank()) {
-            reset(if (event != null) Screen.Dashboard else Screen.EventCode)
+            bootTarget = if (event != null) Screen.Dashboard else Screen.EventCode
             if (event != null) refreshCounts()
-        } else reset(Screen.SignIn)
+        } else bootTarget = Screen.SignIn
+        reset(if (Brand.isPd) Screen.Splash else bootTarget)
 
         viewModelScope.launch {
             while (true) {
@@ -243,6 +287,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val m = mode
         val sess = selectedSession
         if (m == Mode.SESSION && sess == null) { showResult(ScanResult(ResultKind.ERROR, "Choose a session first")); return }
+        if (testMode) {
+            showResult(ScanResult(ResultKind.OK, "Practice " + okTitle(m, pin).lowercase(), "Test attendee", "Test mode: nothing was saved or sent"))
+            return
+        }
         viewModelScope.launch {
             busy = true
             val r: ApiResult = when {
