@@ -34,7 +34,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- settings / session ----
     var theme by mutableStateOf(store.theme)
-    var serverUrl by mutableStateOf(store.baseUrl)
+    var serverUrl by mutableStateOf(if (Brand.isPd) store.baseUrl.removePrefix("http://").removePrefix("https://").substringBefore('/') else store.baseUrl)
     var email by mutableStateOf(store.agentEmail)
     var password by mutableStateOf("")
     var agentName by mutableStateOf(store.agentName)
@@ -137,11 +137,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** The Popular Dynamics app asks for the IP only; the server folder is fixed in the build. */
+    private fun baseOf(input: String): String {
+        val t = input.trim()
+        return Api.normalizeBase(if (Brand.isPd && t.isNotEmpty() && '/' !in t && BuildConfig.SERVER_PATH.isNotEmpty()) "$t/${BuildConfig.SERVER_PATH}" else t)
+    }
+
     // ================= sign in =================
     fun testConnection() {
-        val base = Api.normalizeBase(serverUrl)
+        val base = baseOf(serverUrl)
         if (base.isEmpty()) { setMsg("Enter the server address first.", true); return }
-        serverUrl = base
+        if (!Brand.isPd) serverUrl = base
         viewModelScope.launch {
             busy = true
             when (val r = Api.ping(base)) {
@@ -153,7 +159,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun signIn() {
-        val base = Api.normalizeBase(serverUrl)
+        val base = baseOf(serverUrl)
         if (base.isEmpty()) { setMsg("Enter the server address.", true); return }
         if (email.isBlank() || password.isBlank()) { setMsg("Enter your email and password.", true); return }
         viewModelScope.launch {
@@ -162,7 +168,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 is ApiResult.Reply -> {
                     online = true
                     if (r.status == "success") {
-                        serverUrl = base
+                        if (!Brand.isPd) serverUrl = base
                         store.baseUrl = base
                         agentName = r.json.optString("name").ifBlank { email.trim() }
                         store.agentName = agentName

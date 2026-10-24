@@ -16,7 +16,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -57,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.drawscope.scale as drawScale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -80,14 +85,18 @@ import com.eazytagg.agent.data.Mode
 fun PdLogo(modifier: Modifier = Modifier) {
     val dark = LocalIsDark.current
     val glow = if (dark) Modifier.drawBehind {
-        drawRect(
-            Brush.radialGradient(
-                listOf(Color(0x553AB0FF), Color.Transparent),
-                center = center, radius = size.maxDimension * 0.7f
+        // An ellipse that fades to nothing before it reaches the edges, so no box shows.
+        drawScale(scaleX = size.width / size.height, scaleY = 1f, pivot = center) {
+            drawCircle(
+                Brush.radialGradient(
+                    listOf(Color(0x663AB0FF), Color(0x223AB0FF), Color.Transparent),
+                    center = center, radius = size.height / 2f
+                ),
+                radius = size.height / 2f, center = center
             )
-        )
+        }
     } else Modifier
-    Box(modifier.then(glow), contentAlignment = Alignment.Center) {
+    Box(modifier.then(glow).padding(vertical = 26.dp), contentAlignment = Alignment.Center) {
         Image(
             painter = painterResource(R.drawable.pd_logo),
             contentDescription = "Popular Dynamics",
@@ -129,7 +138,8 @@ fun PdSplash(vm: AppViewModel) {
 @Composable
 fun PdSignIn(vm: AppViewModel) {
     var show by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+    androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface) {
+    Column(Modifier.fillMaxSize().imePadding()) {
         Box(
             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(bottomStart = 40.dp, bottomEnd = 40.dp))
                 .padding(top = 64.dp, bottom = 36.dp, start = 40.dp, end = 40.dp),
@@ -137,7 +147,7 @@ fun PdSignIn(vm: AppViewModel) {
         ) { PdLogo(Modifier.widthIn(max = 320.dp)) }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.widthIn(max = 520.dp).fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
+                Modifier.widthIn(max = 520.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp).navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text("Welcome back", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
@@ -175,6 +185,7 @@ fun PdSignIn(vm: AppViewModel) {
                 }
             }
         }
+    }
     }
 }
 

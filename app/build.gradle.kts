@@ -21,12 +21,15 @@ android {
         create("eazytagg") {
             dimension = "brand"
             buildConfigField("String", "BRAND", "\"eazytagg\"")
+            buildConfigField("String", "SERVER_PATH", "\"\"")
         }
         create("pd") {
             dimension = "brand"
             applicationId = "com.populardynamics.agent"
             versionNameSuffix = "-pd"
             buildConfigField("String", "BRAND", "\"pd\"")
+            // Folder on the server that holds the app (api/ lives inside it). Change it here when the server folder is renamed.
+            buildConfigField("String", "SERVER_PATH", "\"eazytagg_test\"")
         }
     }
 
