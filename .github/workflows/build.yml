@@ -2,8 +2,11 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, pd-flavour ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -17,10 +20,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.10.2
-      - name: Build debug APK
+      - name: Build debug APKs
         run: |
           set -o pipefail
-          gradle :app:assembleDebug --no-daemon --console=plain 2>&1 | tee build.log
+          gradle :app:assembleEazytaggDebug :app:assemblePdDebug --no-daemon --console=plain 2>&1 | tee build.log
       - name: Show errors
         if: failure()
         run: |
@@ -28,4 +31,18 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: eazytagg-agent-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/eazytagg/debug/*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: popular-dynamics-debug-apk
+          path: app/build/outputs/apk/pd/debug/*.apk
+      - name: Publish Popular Dynamics APK as a download
+        if: github.ref == 'refs/heads/pd-flavour'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete pd-latest --yes --cleanup-tag || true
+          gh release create pd-latest app/build/outputs/apk/pd/debug/*.apk \
+            --prerelease --target "${{ github.sha }}" \
+            --title "Popular Dynamics door staff (latest build)" \
+            --notes "Debug build from branch pd-flavour, commit ${{ github.sha }}."
