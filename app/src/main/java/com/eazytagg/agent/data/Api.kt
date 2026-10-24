@@ -126,4 +126,12 @@ object Api {
     /** Find events by name. Needs the search.events.php endpoint on the server. */
     suspend fun searchEvents(base: String, term: String, username: String) =
         call(base, "search.events.php", JSONObject().put("term", term).put("username", username))
+
+    /** Register a new person (walk-in). The server saves, sends their SMS and prints the tag if the event prints. */
+    suspend fun submitEntry(base: String, code: String, entryData: String) =
+        call(base, "submit.entry.php", JSONObject().put("event_code", code).put("entry_data", entryData).put("consent", "yes"))
+
+    /** Print (or reprint) a person's tag. */
+    suspend fun printTag(base: String, uuid: String, agent: String) =
+        call(base, "attendee.print.php", JSONObject().put("attendee_uuid", uuid).put("agent", agent))
 }

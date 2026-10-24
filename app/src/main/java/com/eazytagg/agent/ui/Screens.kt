@@ -59,6 +59,8 @@ fun Root(vm: AppViewModel) {
     val pd = com.eazytagg.agent.Brand.isPd
     when (vm.screen) {
         Screen.Splash -> if (pd) PdSplash(vm) else SignInScreen(vm)
+        Screen.Person -> PdPerson(vm)
+        Screen.WalkIn -> PdWalkIn(vm)
         Screen.SignIn -> if (pd) PdSignIn(vm) else SignInScreen(vm)
         Screen.EventCode -> if (pd) PdFindEvent(vm) else EventCodeScreen(vm)
         Screen.Dashboard -> if (pd) PdMenu(vm) else DashboardScreen(vm)
@@ -304,6 +306,7 @@ fun SearchScreen(vm: AppViewModel) {
         MessageText(vm.message, vm.messageIsError)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
             items(vm.hits, key = { it.uuid }) { h ->
+                if (com.eazytagg.agent.Brand.isPd) { PdHitCard(vm, h); return@items }
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(h.display, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -337,17 +340,18 @@ fun EditScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun FieldEditor(vm: AppViewModel, f: Field) {
+internal fun FieldEditor(vm: AppViewModel, f: Field, walk: Boolean = false) {
+    val values = if (walk) FieldStore(vm.walkValues, vm.walkMulti) else FieldStore(vm.editValues, vm.editMulti)
     val label = f.name + if (f.required) " *" else ""
     when {
         f.isMulti -> {
             Text(label, fontWeight = FontWeight.SemiBold)
-            val chosen = vm.editMulti[f.id].orEmpty()
+            val chosen = values.multi[f.id].orEmpty()
             f.options.forEach { opt ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable {
-                    vm.editMulti[f.id] = if (opt in chosen) chosen - opt else chosen + opt
+                    values.multi[f.id] = if (opt in chosen) chosen - opt else chosen + opt
                 }) {
-                    Checkbox(checked = opt in chosen, onCheckedChange = { vm.editMulti[f.id] = if (it) chosen + opt else chosen - opt })
+                    Checkbox(checked = opt in chosen, onCheckedChange = { values.multi[f.id] = if (it) chosen + opt else chosen - opt })
                     Text(opt)
                 }
             }
@@ -357,17 +361,17 @@ private fun FieldEditor(vm: AppViewModel, f: Field) {
             Text(label, fontWeight = FontWeight.SemiBold)
             Box {
                 OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                    Text(vm.editValues[f.id].orEmpty().ifBlank { "Choose..." }, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+                    Text(values.single[f.id].orEmpty().ifBlank { "Choose..." }, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
                 }
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                     f.options.forEach { opt ->
-                        DropdownMenuItem(text = { Text(opt) }, onClick = { vm.editValues[f.id] = opt; open = false })
+                        DropdownMenuItem(text = { Text(opt) }, onClick = { values.single[f.id] = opt; open = false })
                     }
                 }
             }
         }
         else -> OutlinedTextField(
-            value = vm.editValues[f.id].orEmpty(), onValueChange = { vm.editValues[f.id] = it; vm.clearMsg() },
+            value = values.single[f.id].orEmpty(), onValueChange = { values.single[f.id] = it; vm.clearMsg() },
             label = { Text(label) }, modifier = Modifier.fillMaxWidth(),
             singleLine = f.type != "textarea",
             keyboardOptions = KeyboardOptions(
@@ -381,6 +385,8 @@ private fun FieldEditor(vm: AppViewModel, f: Field) {
         )
     }
 }
+
+class FieldStore(val single: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>, val multi: androidx.compose.runtime.snapshots.SnapshotStateMap<String, List<String>>)
 
 // ---------------------------------------------------------------- sync
 @Composable

@@ -11,12 +11,13 @@ data class Field(
     val options: List<String>,
     val placeholder: String
 ) {
-    val editable: Boolean get() = type in EDITABLE
+    val editable: Boolean get() = type !in NOT_EDITABLE
     val isChoice: Boolean get() = type == "dropdown" || type == "selection"
     val isMulti: Boolean get() = type == "multi_selection"
 
     companion object {
-        val EDITABLE = setOf("text", "email", "phone", "number", "date", "textarea", "dropdown", "selection", "multi_selection")
+        /** Things the agent cannot type: pictures, signatures, package pickers and label text. */
+        val NOT_EDITABLE = setOf("signature", "attachment", "packages", "text_center", "text_right", "label", "heading")
     }
 }
 

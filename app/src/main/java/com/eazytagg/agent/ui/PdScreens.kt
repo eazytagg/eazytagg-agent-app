@@ -267,7 +267,6 @@ fun PdFindEvent(vm: AppViewModel) {
 fun PdMenu(vm: AppViewModel) {
     val ev = vm.event
     val pending = vm.queue.count { !it.failed }
-    val soon = "This needs the next server update. Not available yet."
     Page(
         title = if (ev == null) "Event" else ev.title.ifBlank { "Event ${ev.code}" },
         subtitle = vm.agentName.ifBlank { null },
@@ -319,13 +318,13 @@ fun PdMenu(vm: AppViewModel) {
                 PdTile("Check out", Icons.Filled.Logout, false, Modifier.weight(1f)) { vm.startScan(Mode.CHECKOUT) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                PdTile("Walk-in", Icons.Filled.PersonAdd, false, Modifier.weight(1f)) { vm.setMsg(soon, true) }
+                PdTile("Walk-in", Icons.Filled.PersonAdd, false, Modifier.weight(1f)) { vm.startWalkIn() }
                 PdTile("Search", Icons.Filled.Search, false, Modifier.weight(1f)) { openSearch(vm) }
             }
         } else {
             PdRow("Check in", "Scan a QR code or enter a PIN") { vm.startScan(Mode.CHECKIN) }
             PdRow("Check out", "Record someone leaving") { vm.startScan(Mode.CHECKOUT) }
-            PdRow("Register walk-in", "New guest, payment and badge") { vm.setMsg(soon, true) }
+            PdRow("Register walk-in", "New guest, details and badge") { vm.startWalkIn() }
             PdRow("Search & edit", "Find by name, fix details") { openSearch(vm) }
         }
         MessageText(vm.message, vm.messageIsError)
@@ -395,5 +394,93 @@ private fun PdRow(title: String, sub: String, onClick: () -> Unit) {
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text(sub, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+// ------------------------------------------------------------------ search result (tap to open)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun PdHitCard(vm: AppViewModel, h: com.eazytagg.agent.data.SearchHit) {
+    Card(
+        onClick = { vm.openPerson(h) }, shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(h.display, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                val extra = h.data.values.map { it.trim() }.filter { it.isNotEmpty() && it != h.display && !it.startsWith("(") }.take(2).joinToString(" · ")
+                if (extra.isNotBlank()) Text(extra, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
+            Text("Open", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+// ------------------------------------------------------------------ person
+@Composable
+fun PdPerson(vm: AppViewModel) {
+    val ev = vm.event
+    val pending = vm.personUuid in vm.needPrint
+    Page(title = vm.personName.ifBlank { "Attendee" }, subtitle = ev?.title?.ifBlank { null }, onBack = { vm.back() }, banner = offlineBanner(vm)) {
+        if (pending) {
+            val st = LocalStatus.current
+            Box(Modifier.fillMaxWidth().background(st.warnBg, RoundedCornerShape(14.dp)).padding(14.dp)) {
+                Text("Details changed. Print a new tag so it matches.", color = st.warnFg, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        MessageText(vm.message, vm.messageIsError)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { vm.checkInPerson() }, enabled = !vm.busy, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(16.dp)) { Text("Check in", fontWeight = FontWeight.Bold) }
+            OutlinedButton(onClick = { vm.editPerson() }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(16.dp)) { Text("Edit") }
+        }
+        if (pending) {
+            Button(onClick = { vm.printPersonTag() }, enabled = !vm.printing, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
+                if (vm.printing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text("Print new tag", fontWeight = FontWeight.Bold)
+            }
+        } else {
+            OutlinedButton(onClick = { vm.printPersonTag() }, enabled = !vm.printing, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
+                if (vm.printing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Print tag")
+            }
+        }
+        if (vm.personLoading) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(vertical = 4.dp)) {
+                val shown = (ev?.fields ?: emptyList()).filter { it.editable }
+                shown.forEachIndexed { i, f ->
+                    if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        Text(f.name, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(vm.personValues[f.id].orEmpty().ifBlank { "-" }, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+// ------------------------------------------------------------------ walk-in
+@Composable
+fun PdWalkIn(vm: AppViewModel) {
+    val ev = vm.event
+    Page(title = "Register walk-in", subtitle = ev?.title?.ifBlank { null }, onBack = { vm.back() }, banner = offlineBanner(vm)) {
+        if (ev == null) { Text("No event open."); return@Page }
+        if (vm.walkDone.isNotBlank()) {
+            MessageText(vm.message, vm.messageIsError)
+            Text(vm.walkDone, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+            Button(onClick = { vm.resetWalkIn() }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) { Text("Register another", fontWeight = FontWeight.Bold) }
+            OutlinedButton(onClick = { vm.back() }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) { Text("Done") }
+        } else {
+            ev.fields.filter { it.editable }.forEach { f -> FieldEditor(vm, f, walk = true) }
+            MessageText(vm.message, vm.messageIsError)
+            Button(onClick = { vm.submitWalkIn() }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp)) {
+                if (vm.busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text("Register and print tag", fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.height(16.dp))
     }
 }

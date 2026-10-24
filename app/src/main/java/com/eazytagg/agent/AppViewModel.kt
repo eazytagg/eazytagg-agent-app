@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class Screen { Splash, SignIn, EventCode, Dashboard, Sessions, Scan, Search, Edit, Sync, Activity, Settings }
+enum class Screen { Splash, Person, WalkIn, SignIn, EventCode, Dashboard, Sessions, Scan, Search, Edit, Sync, Activity, Settings }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val store = Store(app)
@@ -96,6 +96,99 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Open a recent person's record in Search. */
     fun openRecent(r: Recent) { searchTerm = r.name; go(Screen.Search); onSearchChange(r.name) }
+
+    // ---- person / walk-in ----
+    var personUuid by mutableStateOf("")
+    var personName by mutableStateOf("")
+    val personValues = mutableStateMapOf<String, String>()
+    var personLoading by mutableStateOf(false)
+    /** People whose details changed and whose tag has not been printed again yet. */
+    val needPrint = mutableStateListOf<String>()
+    var printing by mutableStateOf(false)
+    val walkValues = mutableStateMapOf<String, String>()
+    val walkMulti = mutableStateMapOf<String, List<String>>()
+    var walkDone by mutableStateOf("")
+
+    fun openPerson(h: SearchHit) {
+        personUuid = h.uuid; personName = h.display; personValues.clear(); message = ""
+        go(Screen.Person)
+        loadPerson()
+    }
+
+    fun loadPerson() {
+        val uuid = personUuid
+        viewModelScope.launch {
+            personLoading = true
+            val r = Api.load(store.baseUrl, uuid)
+            if (r is ApiResult.Reply) {
+                val d = r.json.optJSONObject("data")
+                if (d != null) {
+                    personValues.clear()
+                    d.keys().forEach { k ->
+                        val arr = d.optJSONArray(k)
+                        personValues[k] = if (arr != null) (0 until arr.length()).joinToString(", ") { arr.optString(it) }
+                        else d.optString(k, "").let { if (it == "null") "" else it }
+                    }
+                } else setMsg("Could not load this person.", true)
+            } else setMsg("Could not load: ${(r as ApiResult.NoConnection).reason}", true)
+            personLoading = false
+        }
+    }
+
+    fun editPerson() = startEdit(SearchHit(personUuid, personName, emptyMap()))
+    fun checkInPerson() = checkInHit(SearchHit(personUuid, personName, emptyMap()))
+
+    fun printPersonTag() {
+        val uuid = personUuid
+        if (testMode) { setMsg("Test mode: the tag was not printed.", false); needPrint.remove(uuid); return }
+        viewModelScope.launch {
+            printing = true; message = ""
+            when (val r = Api.printTag(store.baseUrl, uuid, agentName)) {
+                is ApiResult.Reply -> {
+                    online = true
+                    val ok = r.status == "success" && r.json.optBoolean("printed", false)
+                    if (ok) { needPrint.remove(uuid); log("Print tag", personName, "ok"); setMsg(r.message.ifBlank { "Tag sent to the printer." }, false) }
+                    else { log("Print tag", personName, "error", r.message); setMsg(r.message.ifBlank { "The tag could not be printed." }, true) }
+                }
+                is ApiResult.NoConnection -> setMsg("Cannot print while offline: ${r.reason}", true)
+            }
+            printing = false
+        }
+    }
+
+    fun resetWalkIn() { walkValues.clear(); walkMulti.clear(); walkDone = ""; message = "" }
+    fun startWalkIn() { resetWalkIn(); go(Screen.WalkIn) }
+
+    fun submitWalkIn() {
+        val ev = event ?: return
+        val fields = ev.fields.filter { it.editable }
+        val missing = fields.filter { it.required && if (it.isMulti) walkMulti[it.id].orEmpty().isEmpty() else walkValues[it.id].orEmpty().isBlank() }
+        if (missing.isNotEmpty()) { setMsg("Fill in: ${missing.joinToString { it.name }}", true); return }
+        val data = JSONObject()
+        fields.forEach { f ->
+            if (f.isMulti) data.put(f.id, JSONArray(walkMulti[f.id].orEmpty())) else data.put(f.id, walkValues[f.id].orEmpty().trim())
+        }
+        val shown = ev.successField.split(' ').filter { it.isNotBlank() }.map { walkValues[it].orEmpty().trim() }.filter { it.isNotEmpty() }.joinToString(" ").ifBlank { "New guest" }
+        if (testMode) { walkDone = shown; setMsg("Test mode: nothing was saved.", false); return }
+        viewModelScope.launch {
+            busy = true; message = ""
+            when (val r = Api.submitEntry(store.baseUrl, ev.code, data.toString())) {
+                is ApiResult.NoConnection -> setMsg("Walk-in needs a connection to the server: ${r.reason}", true)
+                is ApiResult.Reply -> {
+                    online = true
+                    if (r.status == "success") {
+                        val name = r.json.optString("display_name").ifBlank { shown }
+                        walkDone = name
+                        rememberLast(name, "Registered")
+                        log("Walk-in", name, "ok")
+                        setMsg("Registered. The tag prints if this event has a printer.", false)
+                        refreshCounts()
+                    } else { log("Walk-in", shown, "error", r.message); setMsg(r.message.ifBlank { "Could not register." }, true) }
+                }
+            }
+            busy = false
+        }
+    }
 
     fun chooseMenuView(v: String) { menuView = v; store.menuView = v }
 
@@ -501,7 +594,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     editSaved = true
                 }
                 is ApiResult.Reply -> when (r.status) {
-                    "success" -> { log("Edit details", editName, "ok"); editSaved = true; setMsg("Saved.", false) }
+                    "success" -> { log("Edit details", editName, "ok"); editSaved = true; if (editUuid !in needPrint) needPrint.add(editUuid); if (editUuid == personUuid) loadPerson(); setMsg("Saved. Print a new tag so it matches.", false) }
                     "exists" -> { log("Edit details", editName, "error", r.message); setMsg(r.message, true) }
                     else -> { log("Edit details", editName, "error", r.message); setMsg(r.message.ifBlank { "Could not save." }, true) }
                 }
