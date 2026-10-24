@@ -137,6 +137,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private val ipRe = Regex("^((25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(25[0-5]|2[0-4]\\d|1?\\d?\\d)$")
+    fun isValidIp(s: String) = ipRe.matches(s.trim())
+
     /** The Popular Dynamics app asks for the IP only; the server folder is fixed in the build. */
     private fun baseOf(input: String): String {
         val t = input.trim()
@@ -145,6 +148,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ================= sign in =================
     fun testConnection() {
+        if (Brand.isPd && !isValidIp(serverUrl)) { setMsg("Enter a valid server IP address, for example 192.168.0.120.", true); return }
         val base = baseOf(serverUrl)
         if (base.isEmpty()) { setMsg("Enter the server address first.", true); return }
         if (!Brand.isPd) serverUrl = base
@@ -159,6 +163,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun signIn() {
+        if (Brand.isPd && !isValidIp(serverUrl)) { setMsg("Enter a valid server IP address, for example 192.168.0.120.", true); return }
         val base = baseOf(serverUrl)
         if (base.isEmpty()) { setMsg("Enter the server address.", true); return }
         if (email.isBlank() || password.isBlank()) { setMsg("Enter your email and password.", true); return }

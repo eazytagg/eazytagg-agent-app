@@ -459,7 +459,7 @@ fun SettingsScreen(vm: AppViewModel) {
         }
         HorizontalDivider()
         Text("Server", fontWeight = FontWeight.Bold)
-        Text(vm.serverUrl.ifBlank { "Not set" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (com.eazytagg.agent.Brand.isPd) (if (vm.serverUrl.isBlank()) "Not set" else "Connected") else vm.serverUrl.ifBlank { "Not set" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Signed in as", fontWeight = FontWeight.Bold)
         Text("${vm.agentName} (${vm.email})", color = MaterialTheme.colorScheme.onSurfaceVariant)
         HorizontalDivider()

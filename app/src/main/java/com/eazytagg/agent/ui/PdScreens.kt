@@ -155,7 +155,8 @@ fun PdSignIn(vm: AppViewModel) {
                 OutlinedTextField(
                     value = vm.serverUrl, onValueChange = { vm.serverUrl = it.filter { c -> c.isDigit() || c == '.' }; vm.clearMsg() },
                     label = { Text("Server IP address") },
-                    supportingText = { Text("Numbers and dots only.") },
+                    isError = vm.serverUrl.isNotBlank() && !vm.isValidIp(vm.serverUrl),
+                    supportingText = { Text(if (vm.serverUrl.isNotBlank() && !vm.isValidIp(vm.serverUrl)) "Use the format 192.168.0.120" else "IP address only. Numbers and dots.") },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
