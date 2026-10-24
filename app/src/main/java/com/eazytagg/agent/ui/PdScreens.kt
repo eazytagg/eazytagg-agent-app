@@ -27,7 +27,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.PersonAdd
@@ -274,6 +276,7 @@ fun PdMenu(vm: AppViewModel) {
         actions = { TextButton(onClick = { vm.go(Screen.Settings) }) { Text("Settings") } }
     ) {
         PdViewToggle(vm.menuView) { vm.chooseMenuView(it) }
+        PdThemeToggle(vm)
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
             Row(Modifier.padding(18.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column {
@@ -340,27 +343,43 @@ fun PdMenu(vm: AppViewModel) {
 
 private fun openSearch(vm: AppViewModel) { vm.searchTerm = ""; vm.hits = emptyList(); vm.clearMsg(); vm.go(Screen.Search) }
 
+/** Pill toggle used for the menu view and the light/dark choice. */
 @Composable
-private fun PdViewToggle(current: String, onPick: (String) -> Unit) {
+fun PdToggle(label: String?, options: List<Triple<String, String, ImageVector?>>, current: String, onPick: (String) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text("View", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(
-            Modifier.background(MaterialTheme.colorScheme.surface, RoundedCornerShape(50)).padding(3.dp)
-        ) {
-            listOf("icons" to ("Icons" to Icons.Filled.GridView), "list" to ("List" to Icons.Filled.ViewList)).forEach { (key, p) ->
+        if (label != null) Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) else Spacer(Modifier)
+        Row(Modifier.background(MaterialTheme.colorScheme.surface, RoundedCornerShape(50)).padding(3.dp)) {
+            options.forEach { (key, text, icon) ->
                 val on = current == key
                 Row(
                     Modifier.background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(50))
-                        .clickable { onPick(key) }.height(36.dp).padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        .clickable { onPick(key) }.height(36.dp).padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val fg = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                    Icon(p.second, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
-                    Text(p.first, color = fg, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
+                    Text(text, color = fg, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 }
             }
         }
     }
+}
+
+@Composable
+fun PdViewToggle(current: String, onPick: (String) -> Unit) = PdToggle(
+    "View", listOf(Triple("icons", "Icons", Icons.Filled.GridView), Triple("list", "List", Icons.Filled.ViewList)), current, onPick
+)
+
+@Composable
+fun PdThemeToggle(vm: AppViewModel, label: String? = "Theme", withAuto: Boolean = false) {
+    val dark = isDarkFor(vm.theme)
+    val opts = buildList {
+        add(Triple("light", "Light", Icons.Filled.LightMode as ImageVector?))
+        add(Triple("dark", "Dark", Icons.Filled.DarkMode as ImageVector?))
+        if (withAuto) add(Triple("system", "Auto", null as ImageVector?))
+    }
+    val current = if (withAuto) vm.theme else if (dark) "dark" else "light"
+    PdToggle(label, opts, current) { vm.chooseTheme(it) }
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)

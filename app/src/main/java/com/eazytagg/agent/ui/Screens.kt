@@ -457,7 +457,8 @@ fun ActivityScreen(vm: AppViewModel) {
 fun SettingsScreen(vm: AppViewModel) {
     Page(title = "Settings", onBack = { vm.back() }) {
         Text("Appearance", fontWeight = FontWeight.Bold)
-        listOf("dark" to "Dark", "light" to "Light", "system" to "Follow the phone").forEach { (k, label) ->
+        if (com.eazytagg.agent.Brand.isPd) PdThemeToggle(vm, label = null, withAuto = true)
+        else listOf("dark" to "Dark", "light" to "Light", "system" to "Follow the phone").forEach { (k, label) ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { vm.chooseTheme(k) }) {
                 RadioButton(selected = vm.theme == k, onClick = { vm.chooseTheme(k) })
                 Text(label)
