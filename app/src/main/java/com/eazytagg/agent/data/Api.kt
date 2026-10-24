@@ -124,6 +124,6 @@ object Api {
         )
 
     /** Find events by name. Needs the search.events.php endpoint on the server. */
-    suspend fun searchEvents(base: String, term: String) =
-        call(base, "search.events.php", JSONObject().put("term", term))
+    suspend fun searchEvents(base: String, term: String, username: String) =
+        call(base, "search.events.php", JSONObject().put("term", term).put("username", username))
 }

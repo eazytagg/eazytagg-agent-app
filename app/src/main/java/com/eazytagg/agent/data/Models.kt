@@ -76,7 +76,7 @@ data class EventInfo(
                     placeholder = f.optString("field_placeholder")
                 )
             }
-            return EventInfo(code, fs, o.optString("success_field"), o.optString("end_date"), "")
+            return EventInfo(code, fs, o.optString("success_field"), o.optString("end_date"), o.optString("title"))
         }
     }
 }

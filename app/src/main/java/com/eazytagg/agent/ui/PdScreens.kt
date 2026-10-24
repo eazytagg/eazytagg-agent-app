@@ -262,6 +262,7 @@ fun PdFindEvent(vm: AppViewModel) {
 }
 
 // ------------------------------------------------------------------ menu
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun PdMenu(vm: AppViewModel) {
     val ev = vm.event
@@ -269,7 +270,7 @@ fun PdMenu(vm: AppViewModel) {
     val soon = "This needs the next server update. Not available yet."
     Page(
         title = if (ev == null) "Event" else ev.title.ifBlank { "Event ${ev.code}" },
-        subtitle = if (ev == null) null else "Code ${ev.code} · ${vm.agentName}",
+        subtitle = vm.agentName.ifBlank { null },
         banner = offlineBanner(vm),
         actions = { TextButton(onClick = { vm.go(Screen.Settings) }) { Text("Settings") } }
     ) {
@@ -285,6 +286,21 @@ fun PdMenu(vm: AppViewModel) {
                         Text("$k  $v", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick = { vm.refreshCounts() }) { Text("Refresh") }
+                }
+            }
+        }
+        if (vm.lastName.isNotBlank()) {
+            Card(
+                onClick = { vm.openLast() }, shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Last " + vm.lastAction.lowercase(), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(vm.lastName, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Text(timeText(vm.lastAt), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -309,7 +325,6 @@ fun PdMenu(vm: AppViewModel) {
                 Text(if (pending > 0) "Sync ($pending)" else "Sync")
             }
             OutlinedButton(onClick = { vm.go(Screen.Activity) }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(14.dp)) { Text("Activity") }
-            OutlinedButton(onClick = { vm.changeEvent() }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(14.dp)) { Text("Event") }
         }
         Spacer(Modifier.height(16.dp))
     }

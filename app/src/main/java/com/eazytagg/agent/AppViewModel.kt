@@ -81,6 +81,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var eventJob: Job? = null
     private var bootTarget = Screen.SignIn
 
+    var lastName by mutableStateOf(store.lastName)
+    var lastAt by mutableStateOf(store.lastAt)
+    var lastAction by mutableStateOf(store.lastAction)
+    private fun rememberLast(name: String, action: String) {
+        lastName = name; lastAt = System.currentTimeMillis(); lastAction = action
+        store.lastName = lastName; store.lastAt = lastAt; store.lastAction = lastAction
+    }
+
+    /** Open the last person's record in Search. */
+    fun openLast() { if (lastName.isNotBlank()) { searchTerm = lastName; go(Screen.Search); onSearchChange(lastName) } }
+
     fun chooseMenuView(v: String) { menuView = v; store.menuView = v }
 
     /** Called when the splash animation has played. */
@@ -93,7 +104,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         eventJob = viewModelScope.launch {
             delay(350)
             eventSearching = true
-            when (val r = Api.searchEvents(store.baseUrl, t.trim())) {
+            when (val r = Api.searchEvents(store.baseUrl, t.trim(), email.trim().ifBlank { store.agentEmail })) {
                 is ApiResult.Reply -> {
                     online = true
                     val arr = r.json.optJSONArray("events") ?: JSONArray()
@@ -128,6 +139,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (event != null) refreshCounts()
         } else bootTarget = Screen.SignIn
         reset(if (Brand.isPd) Screen.Splash else bootTarget)
+        val ev0 = event
+        if (ev0 != null && ev0.title.isBlank() && store.baseUrl.isNotBlank()) viewModelScope.launch {
+            val r = Api.getEvent(store.baseUrl, ev0.code)
+            if (r is ApiResult.Reply && r.status == "success") {
+                val ev = EventInfo.fromServer(ev0.code, r.json)
+                event = ev; store.eventJson = ev.toJson()
+            }
+        }
 
         viewModelScope.launch {
             while (true) {
@@ -335,6 +354,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     when {
                         r.status == "success" && !already -> {
                             log(action, name.ifBlank { ref }, "ok")
+                            if (name.isNotBlank() && m != Mode.SESSION) rememberLast(name, m.label)
                             val pk = r.json.optString("package")
                             val printNote = if (r.json.optBoolean("printed", false)) "Tag sent to the printer" else ""
                             showResult(ScanResult(ResultKind.OK, okTitle(m, pin), name, listOf(pk, printNote).filter { it.isNotBlank() }.joinToString(" · ")))
