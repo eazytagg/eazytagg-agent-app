@@ -39,16 +39,10 @@ class Store(private val ctx: Context) {
         get() = prefs.getString("theme", "dark") ?: "dark"
         set(v) = prefs.edit().putString("theme", v).apply()
 
-    /** Last person checked in at this desk. */
-    var lastName: String
-        get() = prefs.getString("lastName", "") ?: ""
-        set(v) = prefs.edit().putString("lastName", v).apply()
-    var lastAt: Long
-        get() = prefs.getLong("lastAt", 0L)
-        set(v) = prefs.edit().putLong("lastAt", v).apply()
-    var lastAction: String
-        get() = prefs.getString("lastAction", "") ?: ""
-        set(v) = prefs.edit().putString("lastAction", v).apply()
+    /** The last few people checked in or registered at this desk, newest first (JSON). */
+    var recentJson: String
+        get() = prefs.getString("recent", "[]") ?: "[]"
+        set(v) = prefs.edit().putString("recent", v).apply()
 
     /** Popular Dynamics menu layout: icons | list. */
     var menuView: String

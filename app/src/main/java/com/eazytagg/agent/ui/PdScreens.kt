@@ -289,18 +289,27 @@ fun PdMenu(vm: AppViewModel) {
                 }
             }
         }
-        if (vm.lastName.isNotBlank()) {
+        if (vm.recent.isNotEmpty()) {
             Card(
-                onClick = { vm.openLast() }, shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), modifier = Modifier.fillMaxWidth()
             ) {
-                Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Last " + vm.lastAction.lowercase(), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(vm.lastName, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Column {
+                    Text("Recent at this desk", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 4.dp))
+                    vm.recent.forEachIndexed { i, r ->
+                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                        Row(
+                            Modifier.fillMaxWidth().clickable { vm.openRecent(r) }.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(r.name, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text(r.action, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(timeText(r.at), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
-                    Text(timeText(vm.lastAt), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

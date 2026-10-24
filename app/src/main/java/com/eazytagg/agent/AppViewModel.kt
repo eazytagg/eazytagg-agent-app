@@ -81,16 +81,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var eventJob: Job? = null
     private var bootTarget = Screen.SignIn
 
-    var lastName by mutableStateOf(store.lastName)
-    var lastAt by mutableStateOf(store.lastAt)
-    var lastAction by mutableStateOf(store.lastAction)
+    val recent = mutableStateListOf<Recent>().also { list ->
+        try {
+            val arr = JSONArray(store.recentJson)
+            for (i in 0 until arr.length()) { val o = arr.getJSONObject(i); list.add(Recent(o.optString("n"), o.optLong("t"), o.optString("a"))) }
+        } catch (_: Exception) {}
+    }
     private fun rememberLast(name: String, action: String) {
-        lastName = name; lastAt = System.currentTimeMillis(); lastAction = action
-        store.lastName = lastName; store.lastAt = lastAt; store.lastAction = lastAction
+        recent.removeAll { it.name == name && it.action == action }
+        recent.add(0, Recent(name, System.currentTimeMillis(), action))
+        while (recent.size > 3) recent.removeAt(recent.size - 1)
+        store.recentJson = JSONArray().also { arr -> recent.forEach { arr.put(JSONObject().put("n", it.name).put("t", it.at).put("a", it.action)) } }.toString()
     }
 
-    /** Open the last person's record in Search. */
-    fun openLast() { if (lastName.isNotBlank()) { searchTerm = lastName; go(Screen.Search); onSearchChange(lastName) } }
+    /** Open a recent person's record in Search. */
+    fun openRecent(r: Recent) { searchTerm = r.name; go(Screen.Search); onSearchChange(r.name) }
 
     fun chooseMenuView(v: String) { menuView = v; store.menuView = v }
 

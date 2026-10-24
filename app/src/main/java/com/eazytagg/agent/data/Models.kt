@@ -158,3 +158,6 @@ data class SearchHit(val uuid: String, val display: String, val data: Map<String
 data class EventHit(val code: String, val title: String, val city: String, val date: String) {
     val sub: String get() = listOf(code, city, date).filter { it.isNotBlank() }.joinToString(" · ")
 }
+
+/** One entry in the "Recent" list on the menu. */
+data class Recent(val name: String, val at: Long, val action: String)
